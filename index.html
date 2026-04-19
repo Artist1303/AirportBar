@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE AIRPORT - Nakhon Pathom - Inventory System</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* สไตล์สำหรับปุ่มเครื่องหมายคณิตศาสตร์ */
+        .btn-math {
+            flex: 1;
+            padding: 8px 2px;
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .btn-math.active {
+            background: #3B82F6 !important;
+            border-color: #3B82F6 !important;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+<div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <p style="color: white; font-weight: bold; margin-top: 15px;">กำลังโหลดข้อมูล...</p>
+</div>
+<div class="container">
+    <div class="brand-header">
+        <h2 class="brand-title">THE AIRPORT - Nakhon Pathom</h2>
+        <div class="brand-subtitle">INVENTORY CONTROL SYSTEM</div>
+    </div>
+
+    <div class="zone-tabs">
+        <button class="zone-btn active" id="zone-main" onclick="switchZone('main')">🥂 บาร์หลัก</button>
+        <button class="zone-btn" id="zone-stock" onclick="switchZone('stock')">📦 สต๊อกบาร์</button>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" id="tab-record" onclick="switchPage('record')">📝 หน้าบันทึก</button>
+        <button class="tab-btn" id="tab-history" onclick="switchPage('history')">🕒 หน้าประวัติ / รายงาน</button>
+    </div>
+
+    <div id="record-page" class="page active">
+        <div class="quick-input-card">
+            <div class="quick-input-header">⚡ ระบบกรอกเลขด่วน (Quick Input)</div>
+            <div class="quick-input-flex">
+
+                <div class="custom-select-wrapper" id="itemSelectWrapper">
+                    <div class="custom-select-trigger" onclick="toggleCustomSelect('itemOptions')">
+                        <span id="selectedItemText">-- เลือกรายการสินค้า --</span>
+                        <div class="arrow"></div>
+                    </div>
+                    <ul class="custom-options" id="itemOptions"></ul>
+                    <input type="hidden" id="quickItemSelect" value="">
+                </div>
+
+                <div class="custom-select-wrapper" id="colSelectWrapper">
+                    <div class="custom-select-trigger" onclick="toggleCustomSelect('colOptions')">
+                        <span id="selectedColText">-- เลือกคอลัมน์ --</span>
+                        <div class="arrow"></div>
+                    </div>
+                    <ul class="custom-options" id="colOptions"></ul>
+                    <input type="hidden" id="quickColSelect" value="">
+                </div>
+
+                <input type="number" id="quickNumInput" class="quick-input-num" placeholder="เลข..." aria-label="จำนวนที่ต้องการกรอกด่วน" onkeydown="if(event.key==='Enter') applyQuickInput()">
+                <button class="btn-quick-save" onclick="applyQuickInput()">💾 บันทึก</button>
+            </div>
+        </div>
+        <div class="input-group">
+            <input type="text" id="newItemName" aria-label="ชื่อสินค้าใหม่" placeholder="เพิ่มรายการสินค้าใหม่..."
+                   onkeydown="if(event.key==='Enter') addItem()">
+            <button class="btn-add" onclick="addItem()">เพิ่มรายการ</button>
+        </div>
+
+        <div class="action-row">
+            <button class="btn-load-default" onclick="loadDefaultItems()">🔄 ดึงรายการเริ่มต้น (รีเซ็ต)</button>
+            <button class="btn-load-default" onclick="openAddColumnModal()"
+                    style="color: #3B82F6; border-color: #3B82F6; flex: 1;">➕ เพิ่มคอลัมน์ใหม่</button>
+            <button class="btn-load-default" onclick="saveCurrentAsDefault()"
+                    style="color: #10B981; border-color: #10B981; flex: 1;">🌟 ตั้งเป็นค่าเริ่มต้น</button>
+        </div>
+
+        <div class="table-responsive">
+            <table class="inventory-table">
+                <thead id="dynamic-thead"></thead>
+                <tbody id="stock-list"></tbody>
+            </table>
+        </div>
+
+        <button class="btn-save" id="save-btn" onclick="saveToHistory()">💾 ยืนยันสต็อกประจำวัน</button>
+    </div> <div id="history-page" class="page">
+    <div id="history-list"></div>
+    <button class="btn-clear-history" onclick="clearHistory()">🗑️ ล้างประวัติทั้งหมด</button>
+</div>
+</div>
+
+<div id="customModal" class="modal-overlay" style="z-index: 99999;">
+    <div class="modal-card">
+        <div class="modal-icon" id="modalIcon">⚠️</div>
+        <h3 class="modal-title" id="modalTitle">แจ้งเตือน</h3>
+        <p class="modal-desc" id="modalDesc">รายละเอียดแจ้งเตือน</p>
+        <div class="modal-actions" style="margin-top: 20px;">
+            <button class="btn-modal-confirm" id="modalConfirmBtn">ตกลง</button>
+        </div>
+    </div>
+</div>
+
+<div id="addColumnModal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-icon">➕</div>
+        <h3 class="modal-title">เพิ่มคอลัมน์ใหม่</h3>
+        <p class="modal-desc">กรุณากำหนดชื่อและประเภทของคอลัมน์</p>
+
+        <input type="text" id="addColName" aria-label="ชื่อคอลัมน์ใหม่" class="modal-input" placeholder="พิมพ์ชื่อคอลัมน์...">
+
+        <div class="custom-select-wrapper" style="margin-top: 10px; text-align: left;">
+            <div class="custom-select-trigger" onclick="toggleCustomSelect('addColTypeOptions')">
+                <span id="selectedAddColTypeText">🔢 ประเภท: ตัวเลข (+/-)</span>
+                <div class="arrow"></div>
+            </div>
+            <ul class="custom-options" id="addColTypeOptions">
+                <li onclick="selectAddColType('number', '🔢 ประเภท: ตัวเลข (+/-)')">🔢 ประเภท: ตัวเลข (+/-)</li>
+                <li onclick="selectAddColType('text', '🔤 ประเภท: ข้อความ')">🔤 ประเภท: ข้อความ</li>
+            </ul>
+            <input type="hidden" id="addColType" value="number">
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px;">
+            <button class="btn-modal-cancel" onclick="closeAddColumnModal()">ยกเลิก</button>
+            <button class="btn-modal-confirm info" onclick="confirmAddColumn()">ยืนยัน</button>
+        </div>
+    </div>
+</div>
+
+<div id="editDateModal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-icon">📅</div>
+        <h3 class="modal-title">แก้ไขวันที่/เวลา</h3>
+        <p class="modal-desc">ระบุวันที่และเวลาที่ต้องการบันทึกใหม่</p>
+        <input type="text" id="editDateInput" aria-label="วันที่และเวลา" class="modal-input" placeholder="ตัวอย่าง: 10/4/2569 14:30:00">
+
+        <div class="modal-actions" style="margin-top: 20px;">
+            <button class="btn-modal-cancel" onclick="closeEditDateModal()">ยกเลิก</button>
+            <button class="btn-modal-confirm success" id="btnConfirmEditDate">บันทึกการแก้ไข</button>
+        </div>
+    </div>
+</div>
+
+<div id="editItemModal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-icon">📦</div>
+        <h3 class="modal-title">แก้ไขชื่อสินค้า</h3>
+        <p class="modal-desc">ระบุชื่อสินค้าที่ต้องการเปลี่ยนแปลง</p>
+        <input type="text" id="editItemInput" aria-label="ชื่อสินค้า" class="modal-input" placeholder="ชื่อสินค้า...">
+        <div class="modal-actions" style="margin-top: 20px;">
+            <button class="btn-modal-cancel" onclick="closeModal('editItemModal')">ยกเลิก</button>
+            <button class="btn-modal-confirm success" id="btnConfirmEditItem">บันทึกการแก้ไข</button>
+        </div>
+    </div>
+</div>
+
+<div id="editColumnModal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-icon">📊</div>
+        <h3 class="modal-title">ตั้งค่าคอลัมน์</h3>
+        <p class="modal-desc">แก้ไขชื่อและตั้งค่าการคำนวณ</p>
+
+        <label style="display: block; text-align: left; margin-bottom: 5px; color: #aaa; font-size: 14px;">ชื่อคอลัมน์:</label>
+        <input type="text" id="editColumnInput" aria-label="แก้ไขชื่อคอลัมน์" class="modal-input" placeholder="ชื่อคอลัมน์...">
+
+        <div style="margin-top: 15px; background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333;">
+            <label for="enableCalcToggle" style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; color: white;">
+                <input type="checkbox" id="enableCalcToggle" onchange="toggleCalcFields()" style="width: 18px; height: 18px;" aria-label="เปิดปิดการคำนวณอัตโนมัติ">
+                🧮 คำนวณค่าอัตโนมัติ
+            </label>
+
+            <div id="calcFields" style="display: none; margin-top: 15px; flex-direction: column; gap: 10px;">
+
+                <div class="custom-select-wrapper">
+                    <div class="custom-select-trigger" onclick="toggleCustomSelect('calcCol1Options')">
+                        <span id="selectedCalcCol1Text">-- เลือกคอลัมน์ที่ 1 --</span>
+                        <div class="arrow"></div>
+                    </div>
+                    <ul class="custom-options" id="calcCol1Options"></ul>
+                    <input type="hidden" id="calcCol1" value="">
+                </div>
+
+                <div style="display: flex; gap: 5px; justify-content: space-between;">
+                    <button class="btn-math" id="btnMathAdd" onclick="selectMathOp('+')">➕ บวก</button>
+                    <button class="btn-math" id="btnMathSub" onclick="selectMathOp('-')">➖ ลบ</button>
+                    <button class="btn-math" id="btnMathMul" onclick="selectMathOp('*')">✖️ คูณ</button>
+                    <button class="btn-math" id="btnMathDiv" onclick="selectMathOp('/')">➗ หาร</button>
+                </div>
+                <input type="hidden" id="calcOperator" value="+">
+
+                <div class="custom-select-wrapper">
+                    <div class="custom-select-trigger" onclick="toggleCustomSelect('calcCol2Options')">
+                        <span id="selectedCalcCol2Text">-- เลือกคอลัมน์ที่ 2 --</span>
+                        <div class="arrow"></div>
+                    </div>
+                    <ul class="custom-options" id="calcCol2Options"></ul>
+                    <input type="hidden" id="calcCol2" value="">
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px; display: flex; justify-content: space-between; gap: 10px;">
+            <button class="btn-modal-cancel" id="btnDeleteColumn" style="background: #ef4444; color: white; border: none; display: none;">🗑️ ลบคอลัมน์</button>
+
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-modal-cancel" onclick="closeModal('editColumnModal')">ยกเลิก</button>
+                <button class="btn-modal-confirm success" id="btnConfirmEditColumn">บันทึกการตั้งค่า</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="successModal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-icon" style="color: #10B981;">🌟</div>
+        <h3 class="modal-title">สำเร็จ!</h3>
+        <p class="modal-desc">บันทึกรูปแบบรายการปัจจุบัน<br>เป็นค่าเริ่มต้นเรียบร้อยแล้ว</p>
+        <div class="modal-actions" style="margin-top: 20px; justify-content: center;">
+            <button class="btn-modal-confirm success" onclick="closeSuccessModal()" style="width: 100%;">ตกลง</button>
+        </div>
+    </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+
+</html>
